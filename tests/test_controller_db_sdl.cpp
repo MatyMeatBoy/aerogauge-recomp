@@ -1,9 +1,10 @@
 #undef NDEBUG
 // Real SDL2 regression for user-supplied gamecontrollerdb.txt loading:
-// verifies that an already-connected, previously unmapped virtual joystick is
-// recognized after load_user_mappings_from(), that untagged lines without a
-// matching platform:<OS>, field are ignored by SDL, and that app_data_dir
-// overrides exe_dir for equivalent mapping keys.
+// verifies that an already-connected, previously unmapped virtual joystick
+// starts unrecognized, ignores untagged lines without a matching platform:<OS>,
+// field, loads exe_dir mappings, lets app_data_dir override exe_dir for
+// equivalent keys, queues exactly one startup ADDED event per device, and
+// releases the controller handle on a single close.
 #include <SDL.h>
 
 #include <cassert>
@@ -34,16 +35,38 @@ void write_file(const std::filesystem::path& path, const std::string& content) {
     out << content;
 }
 
+void assert_button_bindings(int device_index, int expected_a, int expected_b) {
+    SDL_GameController* gc = SDL_GameControllerOpen(device_index);
+    assert(gc != nullptr);
+    const SDL_GameControllerButtonBind bind_a =
+        SDL_GameControllerGetBindForButton(gc, SDL_CONTROLLER_BUTTON_A);
+    const SDL_GameControllerButtonBind bind_b =
+        SDL_GameControllerGetBindForButton(gc, SDL_CONTROLLER_BUTTON_B);
+    assert(bind_a.bindType == SDL_CONTROLLER_BINDTYPE_BUTTON && bind_a.value.button == expected_a);
+    assert(bind_b.bindType == SDL_CONTROLLER_BINDTYPE_BUTTON && bind_b.value.button == expected_b);
+    SDL_GameControllerClose(gc);
+}
+
 } // namespace
 
 int main() {
     SDL_SetHint(SDL_HINT_VIDEODRIVER, "dummy");
     assert(SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) == 0);
 
-    const int virt_index = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, 4, 12, 1);
+    // Use SDL_JOYSTICK_TYPE_UNKNOWN with a synthetic VID/PID so SDL 2.26.3+ does
+    // not auto-assign a default controller mapping before user files are loaded.
+    SDL_VirtualJoystickDesc desc{};
+    desc.version = SDL_VIRTUAL_JOYSTICK_DESC_VERSION;
+    desc.type = SDL_JOYSTICK_TYPE_UNKNOWN;
+    desc.naxes = 4;
+    desc.nbuttons = 12;
+    desc.nhats = 1;
+    desc.vendor_id = 0x1234;
+    desc.product_id = 0x5678;
+    desc.name = "Virtual Unmapped Test Pad";
+    const int virt_index = SDL_JoystickAttachVirtualEx(&desc);
     assert(virt_index >= 0);
 
-    // Virtual joysticks start unmapped (not recognized as SDL_GameController).
     assert(SDL_IsGameController(virt_index) == SDL_FALSE);
 
     char guid_str[64]{};
@@ -67,25 +90,36 @@ int main() {
     assert(SDL_IsGameController(virt_index) == SDL_FALSE);
 
     // 2. A properly platform-tagged mapping in exe_dir makes the already-attached
-    //    virtual joystick recognizable, and an equivalent entry in app_data_dir
-    //    overrides it.
+    //    virtual joystick recognizable with exe_dir's bindings.
     const std::string plat = std::string("platform:") + current_sdl_platform() + ",";
     write_file(exe_db, std::string(guid_str) + ",Virtual Test Pad,a:b5,b:b4," + plat + "\n");
-    write_file(data_db, std::string(guid_str) + ",Virtual Test Pad,a:b4,b:b5," + plat + "\n");
-
-    aero::controller_db::load_user_mappings_from(data_dir, exe_dir);
+    aero::controller_db::load_user_mappings_from({}, exe_dir);
     assert(SDL_IsGameController(virt_index) == SDL_TRUE);
+    assert_button_bindings(virt_index, 5, 4);
+
+    // 3. Adding an equivalent entry in app_data_dir overrides exe_dir.
+    write_file(data_db, std::string(guid_str) + ",Virtual Test Pad,a:b4,b:b5," + plat + "\n");
+    aero::controller_db::load_user_mappings_from(data_dir, exe_dir);
+    assert_button_bindings(virt_index, 4, 5);
+
+    // 4. Startup controller registration queues exactly one ADDED event for
+    //    the newly mapped device, so one open + one close releases the handle.
+    aero::controller_db::queue_startup_controllers();
+    int added_events = 0;
+    SDL_Event event{};
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_CONTROLLERDEVICEADDED && event.cdevice.which == virt_index) {
+            ++added_events;
+        }
+    }
+    assert(added_events == 1);
 
     SDL_GameController* gc = SDL_GameControllerOpen(virt_index);
     assert(gc != nullptr);
-    const SDL_GameControllerButtonBind bind_a =
-        SDL_GameControllerGetBindForButton(gc, SDL_CONTROLLER_BUTTON_A);
-    const SDL_GameControllerButtonBind bind_b =
-        SDL_GameControllerGetBindForButton(gc, SDL_CONTROLLER_BUTTON_B);
-    assert(bind_a.bindType == SDL_CONTROLLER_BINDTYPE_BUTTON && bind_a.value.button == 4);
-    assert(bind_b.bindType == SDL_CONTROLLER_BINDTYPE_BUTTON && bind_b.value.button == 5);
-
+    const SDL_JoystickID id = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(gc));
     SDL_GameControllerClose(gc);
+    assert(SDL_GameControllerFromInstanceID(id) == nullptr);
+
     SDL_JoystickDetachVirtual(virt_index);
     SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER);
 

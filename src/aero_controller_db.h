@@ -46,8 +46,8 @@ inline std::vector<std::filesystem::path> candidate_paths(
 #if defined(SDL_h_)
 // Loads optional user-supplied SDL gamecontrollerdb.txt files from explicit
 // directories on the SDL main thread. Must run after
-// SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) and before replaying
-// SDL_CONTROLLERDEVICEADDED for already-connected controllers.
+// SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) and before
+// queue_startup_controllers().
 inline void load_user_mappings_from(const std::filesystem::path& app_data_dir,
                                     const std::filesystem::path& exe_dir) {
     for (const auto& path : candidate_paths(app_data_dir, exe_dir)) {
@@ -82,6 +82,22 @@ inline void load_user_mappings(const std::filesystem::path& app_data_dir) {
     }
 #endif
     load_user_mappings_from(app_data_dir, exe_dir);
+}
+
+// Queues exactly one SDL_CONTROLLERDEVICEADDED event for each connected game
+// controller on startup. SDL2-compat / SDL3 may already queue ADDED events
+// during SDL_InitSubSystem or SDL_GameControllerAddMappingsFromFile, whereas
+// classic SDL2 does not; flushing first prevents opening a controller twice.
+inline void queue_startup_controllers() {
+    SDL_PumpEvents();
+    SDL_FlushEvent(SDL_CONTROLLERDEVICEADDED);
+    for (int i = 0; i < SDL_NumJoysticks(); i++) {
+        if (!SDL_IsGameController(i)) continue;
+        SDL_Event event{};
+        event.type = SDL_CONTROLLERDEVICEADDED;
+        event.cdevice.which = i;
+        SDL_PushEvent(&event);
+    }
 }
 #endif
 
