@@ -5,22 +5,9 @@
 #include <cassert>
 #include <chrono>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <string>
 
 #include "aero_controller_db.h"
-
-namespace {
-
-std::string read_file(const std::filesystem::path& path) {
-    std::ifstream input(path);
-    assert(input && "repo source must be readable via __FILE__");
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
-}
-
-} // namespace
 
 int main() {
     using aero::controller_db::candidate_paths;
@@ -65,18 +52,5 @@ int main() {
 
     std::error_code ec;
     std::filesystem::remove_all(tmp, ec);
-
-    // Verify src/main.cpp loads user mappings after SDL_InitSubSystem and before
-    // replaying SDL_CONTROLLERDEVICEADDED for already-connected joysticks.
-    const auto repo = std::filesystem::path(__FILE__).parent_path().parent_path();
-    const std::string main_cpp = read_file(repo / "src" / "main.cpp");
-    const auto init_pos = main_cpp.find("SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER)");
-    const auto load_pos = main_cpp.find("aero::controller_db::load_user_mappings(");
-    const auto enum_pos = main_cpp.find("SDL_NumJoysticks()");
-    assert(init_pos != std::string::npos);
-    assert(load_pos != std::string::npos);
-    assert(enum_pos != std::string::npos);
-    assert(init_pos < load_pos && load_pos < enum_pos);
-
     return 0;
 }

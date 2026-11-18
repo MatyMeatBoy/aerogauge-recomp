@@ -57,15 +57,22 @@ controller without a rumble motor can still provide input.
 
 Controllers that are not in SDL's built-in database (such as generic USB pads
 or retro adapters) need an SDL game-controller mapping before AeroGauge can
-detect them. On startup, the port loads optional `gamecontrollerdb.txt` files
-from:
+detect them. On desktop startup, the port loads optional `gamecontrollerdb.txt`
+files from:
 
-1. the executable directory (desktop builds), then
-2. the per-user [application directory](configuration.md) (Windows, Linux,
-   Android, or portable mode).
+1. the executable directory, then
+2. the per-user [application directory](configuration.md) (Windows, Linux, or
+   portable mode).
 
-Later entries override earlier ones, and `SDL_GAMECONTROLLERCONFIG` remains
-available for one-off command-line overrides.
+Later entries override earlier ones for equivalent mapping keys, and
+`SDL_GAMECONTROLLERCONFIG` remains available for one-off command-line overrides.
+On Android, the app-private application directory is also checked on startup,
+but it is only developer-accessible: the release launcher provides no mapping
+import screen for APK users.
+
+Each line in `gamecontrollerdb.txt` must end with a matching, comma-terminated
+platform tag such as `platform:Windows,` or `platform:Linux,`; SDL's file
+parser silently ignores untagged lines.
 
 When writing or adapting a mapping for an N64-style pad, target AeroGauge's
 controller defaults: SDL `a`/`b`/`start`, `leftshoulder`/`rightshoulder` for
@@ -84,6 +91,9 @@ contents into `gamecontrollerdb.txt` only if your unit matches its layout
 stick on axes 0/1, D-pad on hat 0). It is not bundled automatically because
 incompatible pads share `0079:0006`, CRCs do not guarantee layout, no
 Linux/Android GUIDs were captured, and it has not been playtested in-game.
+Older SDL builds (such as SDL 2.26.3) also fall back across CRCs on the same
+base GUID, so installing this profile can change the bindings of a second
+controller sharing `0079:0006` on the same installation.
 
 The host hands the runtime a normalized stick value, not an N64-scale one.
 `ultramodern`'s `convert_to_n64_range` maps that input through the N64 stick
