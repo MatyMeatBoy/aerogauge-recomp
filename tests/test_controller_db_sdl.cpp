@@ -102,8 +102,15 @@ int main() {
     aero::controller_db::load_user_mappings_from(data_dir, exe_dir);
     assert_button_bindings(virt_index, 4, 5);
 
-    // 4. Startup controller registration queues exactly one ADDED event for
-    //    the newly mapped device, so one open + one close releases the handle.
+    // 4. Seed a pre-existing ADDED event (as SDL2-compat/SDL3 or a hotplug
+    //    during startup can emit), then verify startup registration queues
+    //    exactly one ADDED event for the device so one open + one close
+    //    releases the handle.
+    SDL_Event pre_added{};
+    pre_added.type = SDL_CONTROLLERDEVICEADDED;
+    pre_added.cdevice.which = virt_index;
+    assert(SDL_PushEvent(&pre_added) == 1);
+
     aero::controller_db::queue_startup_controllers();
     int added_events = 0;
     SDL_Event event{};

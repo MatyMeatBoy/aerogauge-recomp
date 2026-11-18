@@ -85,10 +85,11 @@ inline void load_user_mappings(const std::filesystem::path& app_data_dir) {
 }
 
 // Queues exactly one SDL_CONTROLLERDEVICEADDED event for each connected game
-// controller on startup. SDL2-compat / SDL3 may already queue ADDED events
-// during SDL_InitSubSystem or SDL_GameControllerAddMappingsFromFile, whereas
-// classic SDL2 does not; flushing first prevents opening a controller twice.
+// controller on startup. Hold SDL's joystick lock across pump, flush, and
+// enumeration so a hotplug cannot land between flushing and replay, preventing
+// duplicate opens on both classic SDL2 and SDL2-compat / SDL3.
 inline void queue_startup_controllers() {
+    SDL_LockJoysticks();
     SDL_PumpEvents();
     SDL_FlushEvent(SDL_CONTROLLERDEVICEADDED);
     for (int i = 0; i < SDL_NumJoysticks(); i++) {
@@ -98,6 +99,7 @@ inline void queue_startup_controllers() {
         event.cdevice.which = i;
         SDL_PushEvent(&event);
     }
+    SDL_UnlockJoysticks();
 }
 #endif
 
