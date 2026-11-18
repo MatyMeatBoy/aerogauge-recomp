@@ -1,0 +1,23 @@
+From: AeroGauge Contributors <noreply@example.com>
+Subject: [PATCH] recompinput: skip already-registered devices on SDL_CONTROLLERDEVICEADDED
+
+During startup, SDL2-compat / SDL3 can emit SDL_CONTROLLERDEVICEADDED for a
+hotplug concurrently with the host's startup controller enumeration. Checking
+recompinput::get_controller_from_joystick_id before calling SDL_GameControllerOpen
+prevents opening a second SDL_GameController handle for the same instance ID.
+
+diff --git a/recompinput/src/input_events.cpp b/recompinput/src/input_events.cpp
+index d839d12..1000001 100644
+--- a/recompinput/src/input_events.cpp
++++ b/recompinput/src/input_events.cpp
+@@ -73,6 +73,10 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
+     case SDL_EventType::SDL_CONTROLLERDEVICEADDED:
+     {
+         SDL_ControllerDeviceEvent* controller_event = &event->cdevice;
++        const SDL_JoystickID instance_id = SDL_JoystickGetDeviceInstanceID(controller_event->which);
++        if (instance_id != -1 && recompinput::get_controller_from_joystick_id(instance_id) != nullptr) {
++            break;
++        }
+         SDL_GameController* controller = SDL_GameControllerOpen(controller_event->which);
+         printf("Controller added: %d\n", controller_event->which);
+         if (controller != nullptr) {
