@@ -53,55 +53,37 @@ reservations are not written to controls.json or restored across launches.
 The gamepad path uses SDL's standard game-controller mapping. A connected
 controller without a rumble motor can still provide input.
 
-### Generic Chinese N64 USB pad (Windows, opt-in)
+### Custom and unmapped controllers (gamecontrollerdb.txt)
 
-The [optional Windows mapping](controller-profiles/generic-n64-windows.txt)
-describes one transparent-red, three-prong N64-shaped USB pad. It is not loaded
-automatically: other controllers share its `0079:0006` VID/PID and have different
-layouts. Confirm the physical layout below before using it.
+Controllers that are not in SDL's built-in database (such as generic USB pads
+or retro adapters) need an SDL game-controller mapping before AeroGauge can
+detect them. On startup, the port loads optional `gamecontrollerdb.txt` files
+from:
 
-| Physical control | Raw SDL input (zero-based) |
-| --- | --- |
-| A / B / Start | buttons 5 / 4 / 9 |
-| Z / L / R | buttons 8 / 6 / 7 |
-| C up / right / down / left | buttons 0 / 1 / 2 / 3 |
-| Stick X / Y | axes 0 / 1 |
-| D-pad | hat 0 |
+1. the executable directory (desktop builds), then
+2. the per-user [application directory](configuration.md) (Windows, Linux,
+   Android, or portable mode).
 
-Native SDL reports 4 axes, 12 buttons and 1 hat. The same physical unit was
-observed as `USB Joystick`, CRC `8630` with SDL2 2.32.10 and `8e4f` with SDL2
-2.26.3; SDL3 3.4.18 calls it `Microntek USB Joystick`, CRC `79be`.
-The file includes those three Windows variants. CRCs are not serial numbers;
-older SDL can also fall back across CRCs, so a match alone cannot prove layout.
+Later entries override earlier ones, and `SDL_GAMECONTROLLERCONFIG` remains
+available for one-off command-line overrides.
 
-For a session-local test, put the mapping file beside `aerogauge_modern.exe`,
-open PowerShell in that folder, and run:
+When writing or adapting a mapping for an N64-style pad, target AeroGauge's
+controller defaults: SDL `a`/`b`/`start`, `leftshoulder`/`rightshoulder` for
+L/R, `lefttrigger` for Z, `leftx`/`lefty` for the stick, `dpup`/`dpdown`/
+`dpleft`/`dpright` for the D-pad, and signed `rightx`/`righty` directions for
+the C buttons. Leave `back` unassigned if the controller has no Select button
+and use `Escape` or `F10` to open Settings. Any radial stick deadzone is
+configured separately from SDL mapping text.
 
-~~~powershell
-$savedMapping = $env:SDL_GAMECONTROLLERCONFIG
-try {
-    $env:SDL_GAMECONTROLLERCONFIG = (Get-Content .\generic-n64-windows.txt |
-        Where-Object { $_ -and -not $_.StartsWith('#') }) -join "`n"
-    & .\aerogauge_modern.exe
-} finally {
-    $env:SDL_GAMECONTROLLERCONFIG = $savedMapping
-}
-~~~
-
-This uses SDL's mapping override without changing system environment variables.
-Use Controls to check the assigned player's profile, especially if it was edited
-before: physical B maps to SDL B, L/R to shoulders, Z to the left trigger and C
-buttons to signed right-stick directions. Existing saved bindings are not reset.
-No physical Select button was identified; Back is deliberately unassigned.
-Use Escape or F10 for Settings. Do not sacrifice Z to make a menu button.
-
-The owner's capture contains 18 physical assignments and 206 frames over 10
-seconds. Native SDL detection and SDL2 2.32.10 virtual mapping checks support the
-profile, including C directions, hat diagonals and intermediate stick values.
-This pad has not been playtested in AeroGauge, and no Linux/Android GUID is
-inferred from the Windows capture. A 2% radial inner deadzone is only a starting
-recommendation for this unit; the mapping file does not apply it. Do not treat an
-axis deadzone or the Motion page's gyro dead zone as that radial calibration.
+As a contributed opt-in example,
+[generic-n64-windows.txt](controller-profiles/generic-n64-windows.txt) provides
+three measured Windows CRC variants (`8630`, `8e4f`, `79be`) for one
+transparent-red three-prong Chinese N64 USB pad (`0079:0006`). Copy its
+contents into `gamecontrollerdb.txt` only if your unit matches its layout
+(A/B/Start on buttons 5/4/9, Z/L/R on 8/6/7, C-up/right/down/left on 0/1/2/3,
+stick on axes 0/1, D-pad on hat 0). It is not bundled automatically because
+incompatible pads share `0079:0006`, CRCs do not guarantee layout, no
+Linux/Android GUIDs were captured, and it has not been playtested in-game.
 
 The host hands the runtime a normalized stick value, not an N64-scale one.
 `ultramodern`'s `convert_to_n64_range` maps that input through the N64 stick

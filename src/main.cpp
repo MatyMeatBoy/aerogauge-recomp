@@ -63,6 +63,7 @@
 #include "aero_devkeys.h"   // developer warp chord: Ctrl+Shift+1..6
 #include "aero_crash.h"   // native crash reporting and symbol lookup
 #include "aero_log.h"     // levelled logging and the Windows console policy
+#include "aero_controller_db.h"
 #include "aero_rom_desktop.h"
 #include "recompinput/input_events.h"
 #include "recompinput/input_binding.h"
@@ -490,6 +491,7 @@ static ultramodern::renderer::WindowHandle create_window_stub(void* /*gfx_data*/
             return ultramodern::renderer::WindowHandle{};
         }
         SDL_SetEventFilter(sdl_event_filter, nullptr);
+        aero::controller_db::load_user_mappings(aero::paths::app_data_dir());
         // RecompFrontend opens controllers, enables sensors, and registers their
         // profiles while consuming ADDED events. SDL does not enqueue ADDED for
         // devices present before initialization, so replay those notifications
